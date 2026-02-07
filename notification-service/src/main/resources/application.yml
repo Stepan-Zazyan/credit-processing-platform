@@ -1,0 +1,22 @@
+server:
+  port: 8082
+
+spring:
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: notification-service
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+    listener:
+      ack-mode: manual
+    properties:
+      spring.json.add.type.headers: false
+      spring.json.trusted.packages: com.example.notificationservice.dto
+      spring.json.value.default.type: com.example.notificationservice.dto.ApplicationDecisionEvent
+
+logging:
+  level:
+    org.springframework.kafka: info
