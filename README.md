@@ -1,51 +1,83 @@
 # Credit Processing Platform
 
-Мульти-модульный Maven проект с тремя сервисами:
+Проект демонстрирует event-driven архитектуру обработки кредитных заявок на базе Apache Kafka.
 
-- `credit-application-service` — принимает заявки, пишет в Postgres и публикует событие в Kafka.
-- `scoring-service` — слушает заявки, принимает решение (approve/reject) и публикует событие.
-- `notification-service` — слушает решения и пишет лог о доставке уведомления.
+## Архитектура и event flow
 
-## Локальный запуск
+Сервисы:
 
-1. Запустите инфраструктуру:
+- **credit-application-service** — REST API для подачи заявок, сохранение в PostgreSQL, публикация события `credit.application.created`.
+- **scoring-service** — потребляет заявки, рассчитывает решение (approve/reject), публикует `credit.application.approved` или `credit.application.rejected`.
+- **notification-service** — потребляет решения и логирует факт отправки уведомления.
+
+Event flow:
+
+1. Клиент вызывает `POST /applications`.
+2. `credit-application-service` сохраняет заявку в БД со статусом `NEW` и публикует `ApplicationCreated`.
+3. `scoring-service` получает событие, выполняет скоринг и публикует `ApplicationApproved` или `ApplicationRejected`.
+4. `notification-service` отправляет (симулирует) уведомление и пишет в лог: `Notification sent for application {id}`.
+
+## Запуск инфраструктуры (Docker)
 
 ```bash
 docker-compose up -d
 ```
 
-Kafka будет доступна на `localhost:9092`, Postgres — на `localhost:5432` (db=`creditdb`, user=`credit`, pass=`credit`).
+- Kafka: `localhost:9092`
+- PostgreSQL: `localhost:5432`, db=`creditdb`, user=`credit`, pass=`credit`
 
-2. Запустите сервисы из IDE (или через Maven), по портам:
+## Запуск сервисов из IDE
 
-- `credit-application-service` — `8080`
-- `scoring-service` — `8081`
-- `notification-service` — `8082`
+Каждый сервис — отдельный Spring Boot модуль. Запускайте main-классы:
 
-## Пример запроса
+- `credit-application-service` → `CreditApplicationServiceApplication` (порт `8081`)
+- `scoring-service` → `ScoringServiceApplication` (порт `8082`)
+- `notification-service` → `NotificationServiceApplication` (порт `8083`)
+
+## Проверка API (Swagger)
+
+Swagger UI включен во всех сервисах:
+
+- `credit-application-service`: http://localhost:8081/swagger-ui.html
+- `scoring-service`: http://localhost:8082/swagger-ui.html
+- `notification-service`: http://localhost:8083/swagger-ui.html
+
+Пример запроса:
 
 ```bash
-curl -X POST http://localhost:8080/applications \
+curl -X POST http://localhost:8081/applications \
   -H 'Content-Type: application/json' \
   -d '{"clientName":"Иван Иванов","amount":7500.00}'
 ```
 
-Ожидаемое поведение:
+## Prometheus
 
-- заявка сохраняется в Postgres со статусом `CREATED`;
-- в Kafka топик `credit.application.created` уходит событие;
-- `scoring-service` публикует решение в `credit.application.approved` или `credit.application.rejected`;
-- `notification-service` логирует `Notification sent...`.
+Prometheus метрики доступны:
 
-## Retry и DLQ
+- `http://localhost:8081/actuator/prometheus`
+- `http://localhost:8082/actuator/prometheus`
+- `http://localhost:8083/actuator/prometheus`
 
-Для слушателей Kafka настроены 3 попытки (1 первичная + 2 ретрая). После этого сообщение попадает в DLQ топик с суффиксом `.DLQ`, например:
+Health endpoints:
 
-- `credit.application.created.DLQ`
-- `credit.application.approved.DLQ`
-- `credit.application.rejected.DLQ`
+- `http://localhost:8081/actuator/health`
+- `http://localhost:8082/actuator/health`
+- `http://localhost:8083/actuator/health`
 
-Проверить DLQ можно, например, через `kafka-console-consumer`:
+## Retry + DLQ
+
+Kafka consumer-ы настроены на:
+
+- `ack-mode=manual`
+- `enable-auto-commit=false`
+- 3 попытки с фиксированным backoff
+- DLQ топик `<topic>.DLQ`
+
+**Демо DLQ:**
+
+Если `clientName` содержит `fail`, `scoring-service` выбрасывает исключение — сообщение после ретраев попадает в `credit.application.created.DLQ`.
+
+Проверка:
 
 ```bash
 kafka-console-consumer --bootstrap-server localhost:9092 --topic credit.application.created.DLQ --from-beginning
