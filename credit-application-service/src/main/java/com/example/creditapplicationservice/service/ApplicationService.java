@@ -1,8 +1,11 @@
 package com.example.creditapplicationservice.service;
 
-import com.example.creditapplicationservice.dto.ApplicationCreatedEvent;
 import com.example.creditapplicationservice.dto.ApplicationRequest;
 import com.example.creditapplicationservice.entity.Application;
+import com.example.creditapplicationservice.entity.OutboxEvent;
+import com.example.creditapplicationservice.repository.ApplicationRepository;
+import com.example.creditapplicationservice.repository.OutboxEventRepository;
+import java.util.UUID;
 import com.example.creditapplicationservice.entity.OutboxEventEntity;
 import com.example.creditapplicationservice.entity.OutboxEventStatus;
 import com.example.creditapplicationservice.repository.ApplicationRepository;
@@ -34,6 +37,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class ApplicationService {
+    public static final String CREATED_STATUS = "CREATED";
     private static final Logger logger = LoggerFactory.getLogger(ApplicationService.class);
     private static final String CREATED_STATUS = "CREATED";
     private static final String APPROVED_STATUS = "APPROVED";
@@ -42,6 +46,11 @@ public class ApplicationService {
 
     private final ApplicationRepository applicationRepository;
     private final OutboxEventRepository outboxEventRepository;
+
+    public ApplicationService(ApplicationRepository applicationRepository,
+                              OutboxEventRepository outboxEventRepository) {
+        this.applicationRepository = applicationRepository;
+        this.outboxEventRepository = outboxEventRepository;
     private final ObjectMapper objectMapper;
 
     public ApplicationService(ApplicationRepository applicationRepository,
@@ -127,6 +136,12 @@ public class ApplicationService {
         Application application = new Application(id, request.getClientName(), request.getAmount(), CREATED_STATUS);
         Application saved = applicationRepository.save(application);
 
+        OutboxEvent outboxEvent = new OutboxEvent(
+                UUID.randomUUID(),
+                saved.getId(),
+                TOPIC,
+                "ApplicationCreatedEvent",
+                OutboxPublisherService.OUTBOX_STATUS_NEW
         UUID eventId = UUID.randomUUID();
         ApplicationCreatedEvent eventPayload = new ApplicationCreatedEvent(
                 eventId,

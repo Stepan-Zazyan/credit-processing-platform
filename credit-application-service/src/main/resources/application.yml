@@ -31,6 +31,16 @@ spring:
       spring.json.trusted.packages: com.example.creditapplicationservice.dto
       spring.json.value.default.type: com.example.creditapplicationservice.dto.ApplicationDecisionEvent
 
+credit:
+  application:
+    outbox:
+      publisher:
+        polling-interval-ms: 5000
+    repair:
+      threshold: 2m
+      polling-interval-ms: 30000
+      check-stuck-applications: true
+
 logging:
   pattern:
     console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} level=%-5p service=${spring.application.name} requestId=%X{requestId:-} thread=%t logger=%logger{36} msg=\"%m\"%n"
