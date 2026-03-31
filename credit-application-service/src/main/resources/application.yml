@@ -19,6 +19,16 @@ spring:
     properties:
       spring.json.add.type.headers: false
 
+credit:
+  application:
+    outbox:
+      publisher:
+        polling-interval-ms: 5000
+    repair:
+      threshold: 2m
+      polling-interval-ms: 30000
+      check-stuck-applications: true
+
 logging:
   level:
     org.springframework.kafka: info
