@@ -2,6 +2,8 @@ server:
   port: 8080
 
 spring:
+  application:
+    name: credit-application-service
   datasource:
     url: jdbc:postgresql://localhost:5432/creditdb
     username: credit
@@ -30,5 +32,29 @@ spring:
       spring.json.value.default.type: com.example.creditapplicationservice.dto.ApplicationDecisionEvent
 
 logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} level=%-5p service=${spring.application.name} requestId=%X{requestId:-} thread=%t logger=%logger{36} msg=\"%m\"%n"
   level:
     org.springframework.kafka: info
+
+outbox:
+  publisher:
+    fixed-delay-ms: 1000
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+info:
+  app:
+    name: ${spring.application.name}

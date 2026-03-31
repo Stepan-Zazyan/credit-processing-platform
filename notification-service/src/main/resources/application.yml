@@ -2,6 +2,17 @@ server:
   port: 8082
 
 spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/creditdb
+    username: credit
+    password: credit
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    table: flyway_schema_history_notification
+  application:
+    name: notification-service
   kafka:
     bootstrap-servers: localhost:9092
     consumer:
@@ -18,5 +29,26 @@ spring:
       spring.json.value.default.type: com.example.notificationservice.dto.ApplicationDecisionEvent
 
 logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} level=%-5p service=${spring.application.name} requestId=%X{requestId:-} thread=%t logger=%logger{36} msg=\"%m\"%n"
   level:
     org.springframework.kafka: info
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+info:
+  app:
+    name: ${spring.application.name}
