@@ -10,6 +10,8 @@ import com.example.creditapplicationservice.repository.OutboxEventRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.example.creditapplicationservice.entity.IdempotencyRecord;
 import com.example.creditapplicationservice.repository.ApplicationRepository;
 import com.example.creditapplicationservice.repository.IdempotencyRecordRepository;
@@ -32,7 +34,10 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class ApplicationService {
+    private static final Logger logger = LoggerFactory.getLogger(ApplicationService.class);
     private static final String CREATED_STATUS = "CREATED";
+    private static final String APPROVED_STATUS = "APPROVED";
+    private static final String REJECTED_STATUS = "REJECTED";
     private static final String TOPIC = "credit.application.created";
 
     private final ApplicationRepository applicationRepository;
@@ -144,6 +149,33 @@ public class ApplicationService {
         return saved;
     }
 
+    @Transactional
+    public void markApproved(UUID applicationId) {
+        updateStatus(applicationId, APPROVED_STATUS);
+    }
+
+    @Transactional
+    public void markRejected(UUID applicationId) {
+        updateStatus(applicationId, REJECTED_STATUS);
+    }
+
+    private void updateStatus(UUID applicationId, String targetStatus) {
+        if (applicationId == null) {
+            logger.warn("Skipping decision processing: applicationId is null");
+            return;
+        }
+
+        applicationRepository.findById(applicationId)
+                .ifPresentOrElse(application -> {
+                    if (targetStatus.equals(application.getStatus())) {
+                        logger.info("Duplicate decision received for application {} with status {}, skipping update",
+                                applicationId, targetStatus);
+                        return;
+                    }
+                    application.setStatus(targetStatus);
+                    applicationRepository.save(application);
+                    logger.info("Application {} status updated to {}", applicationId, targetStatus);
+                }, () -> logger.warn("Application {} not found, decision event ignored", applicationId));
     private String toJson(ApplicationCreatedEvent eventPayload) {
         try {
             return objectMapper.writeValueAsString(eventPayload);
