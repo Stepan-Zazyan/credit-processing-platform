@@ -3,6 +3,13 @@ package com.example.creditapplicationservice.service;
 import com.example.creditapplicationservice.dto.ApplicationCreatedEvent;
 import com.example.creditapplicationservice.dto.ApplicationRequest;
 import com.example.creditapplicationservice.entity.Application;
+import com.example.creditapplicationservice.entity.OutboxEventEntity;
+import com.example.creditapplicationservice.entity.OutboxEventStatus;
+import com.example.creditapplicationservice.repository.ApplicationRepository;
+import com.example.creditapplicationservice.repository.OutboxEventRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.UUID;
 import com.example.creditapplicationservice.entity.IdempotencyRecord;
 import com.example.creditapplicationservice.repository.ApplicationRepository;
 import com.example.creditapplicationservice.repository.IdempotencyRecordRepository;
@@ -29,6 +36,14 @@ public class ApplicationService {
     private static final String TOPIC = "credit.application.created";
 
     private final ApplicationRepository applicationRepository;
+    private final OutboxEventRepository outboxEventRepository;
+    private final ObjectMapper objectMapper;
+
+    public ApplicationService(ApplicationRepository applicationRepository,
+                              OutboxEventRepository outboxEventRepository,
+                              ObjectMapper objectMapper) {
+        this.applicationRepository = applicationRepository;
+        this.outboxEventRepository = outboxEventRepository;
     private final IdempotencyRecordRepository idempotencyRecordRepository;
     private final KafkaTemplate<String, ApplicationCreatedEvent> kafkaTemplate;
     private final JdbcTemplate jdbcTemplate;
@@ -47,6 +62,9 @@ public class ApplicationService {
     }
 
     @Transactional
+    public Application create(ApplicationRequest request) {
+        UUID applicationId = UUID.randomUUID();
+        Application application = new Application(applicationId, request.getClientName(), request.getAmount(), CREATED_STATUS);
     public CreateApplicationResult create(ApplicationRequest request, String idempotencyKey) {
         String requestHash = hashRequest(request);
         int inserted = jdbcTemplate.update(
@@ -103,12 +121,34 @@ public class ApplicationService {
         UUID id = UUID.randomUUID();
         Application application = new Application(id, request.getClientName(), request.getAmount(), CREATED_STATUS);
         Application saved = applicationRepository.save(application);
-        ApplicationCreatedEvent event = new ApplicationCreatedEvent(saved.getId(), saved.getClientName(),
-                saved.getAmount(), saved.getStatus());
-        kafkaTemplate.send(TOPIC, saved.getId().toString(), event);
+
+        UUID eventId = UUID.randomUUID();
+        ApplicationCreatedEvent eventPayload = new ApplicationCreatedEvent(
+                eventId,
+                saved.getId(),
+                saved.getClientName(),
+                saved.getAmount(),
+                saved.getStatus()
+        );
+
+        OutboxEventEntity outboxEvent = new OutboxEventEntity(
+                eventId,
+                saved.getId(),
+                TOPIC,
+                ApplicationCreatedEvent.class.getSimpleName(),
+                toJson(eventPayload),
+                OutboxEventStatus.NEW
+        );
+        outboxEventRepository.save(outboxEvent);
+
         return saved;
     }
 
+    private String toJson(ApplicationCreatedEvent eventPayload) {
+        try {
+            return objectMapper.writeValueAsString(eventPayload);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Could not serialize application created event", e);
     private String hashRequest(ApplicationRequest request) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");

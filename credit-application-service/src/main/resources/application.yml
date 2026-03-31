@@ -27,6 +27,9 @@ logging:
   level:
     org.springframework.kafka: info
 
+outbox:
+  publisher:
+    fixed-delay-ms: 1000
 management:
   endpoints:
     web:
