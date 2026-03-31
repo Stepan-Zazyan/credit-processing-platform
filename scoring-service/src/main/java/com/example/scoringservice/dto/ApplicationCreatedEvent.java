@@ -1,10 +1,16 @@
 package com.example.scoringservice.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import java.math.BigDecimal;
 import java.util.UUID;
 
 public class ApplicationCreatedEvent {
+    @JsonAlias("eventId")
     private UUID id;
+
+    @JsonAlias("applicationId")
+    private UUID applicationId;
+
     private String clientName;
     private BigDecimal amount;
     private String status;
@@ -12,8 +18,9 @@ public class ApplicationCreatedEvent {
     public ApplicationCreatedEvent() {
     }
 
-    public ApplicationCreatedEvent(UUID id, String clientName, BigDecimal amount, String status) {
+    public ApplicationCreatedEvent(UUID id, UUID applicationId, String clientName, BigDecimal amount, String status) {
         this.id = id;
+        this.applicationId = applicationId;
         this.clientName = clientName;
         this.amount = amount;
         this.status = status;
@@ -25,6 +32,14 @@ public class ApplicationCreatedEvent {
 
     public void setId(UUID id) {
         this.id = id;
+    }
+
+    public UUID getApplicationId() {
+        return applicationId;
+    }
+
+    public void setApplicationId(UUID applicationId) {
+        this.applicationId = applicationId;
     }
 
     public String getClientName() {

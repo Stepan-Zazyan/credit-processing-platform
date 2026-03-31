@@ -2,7 +2,8 @@ package com.example.creditapplicationservice.service;
 
 import com.example.creditapplicationservice.config.RepairJobProperties;
 import com.example.creditapplicationservice.entity.Application;
-import com.example.creditapplicationservice.entity.OutboxEvent;
+import com.example.creditapplicationservice.entity.OutboxEventEntity;
+import com.example.creditapplicationservice.entity.OutboxEventStatus;
 import com.example.creditapplicationservice.repository.ApplicationRepository;
 import com.example.creditapplicationservice.repository.OutboxEventRepository;
 import java.time.OffsetDateTime;
@@ -19,31 +20,31 @@ public class OutboxRepairJob {
     private final RepairJobProperties repairJobProperties;
     private final OutboxEventRepository outboxEventRepository;
     private final ApplicationRepository applicationRepository;
-    private final OutboxPublisherService outboxPublisherService;
+    private final OutboxPublisher outboxPublisher;
 
     public OutboxRepairJob(RepairJobProperties repairJobProperties,
                            OutboxEventRepository outboxEventRepository,
                            ApplicationRepository applicationRepository,
-                           OutboxPublisherService outboxPublisherService) {
+                           OutboxPublisher outboxPublisher) {
         this.repairJobProperties = repairJobProperties;
         this.outboxEventRepository = outboxEventRepository;
         this.applicationRepository = applicationRepository;
-        this.outboxPublisherService = outboxPublisherService;
+        this.outboxPublisher = outboxPublisher;
     }
 
     @Scheduled(fixedDelayString = "${credit.application.repair.polling-interval-ms:30000}")
     public void reconcile() {
         OffsetDateTime thresholdTime = OffsetDateTime.now().minus(repairJobProperties.getThreshold());
 
-        List<OutboxEvent> staleEvents = outboxEventRepository.findTop100ByStatusAndCreatedAtBeforeOrderByCreatedAtAsc(
-                OutboxPublisherService.OUTBOX_STATUS_NEW,
+        List<OutboxEventEntity> staleEvents = outboxEventRepository.findTop100ByStatusAndCreatedAtBeforeOrderByCreatedAtAsc(
+                OutboxEventStatus.NEW,
                 thresholdTime
         );
 
-        for (OutboxEvent staleEvent : staleEvents) {
+        for (OutboxEventEntity staleEvent : staleEvents) {
             log.warn("Found stale NEW outbox event id={} aggregateId={} createdAt={}",
-                    staleEvent.getId(), staleEvent.getAggregateId(), staleEvent.getCreatedAt());
-            outboxPublisherService.publishEvent(staleEvent);
+                    staleEvent.getEventId(), staleEvent.getAggregateId(), staleEvent.getCreatedAt());
+            outboxPublisher.publishEvent(staleEvent);
         }
 
         if (repairJobProperties.isCheckStuckApplications()) {

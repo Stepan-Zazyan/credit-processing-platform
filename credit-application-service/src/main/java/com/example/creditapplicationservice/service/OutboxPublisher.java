@@ -34,15 +34,20 @@ public class OutboxPublisher {
     @Transactional
     public void publishNewEvents() {
         List<OutboxEventEntity> events = outboxEventRepository.findTop100ByStatusOrderByCreatedAtAsc(OutboxEventStatus.NEW);
-        for (OutboxEventEntity event : events) {
-            try {
-                ApplicationCreatedEvent payload = objectMapper.readValue(event.getPayload(), ApplicationCreatedEvent.class);
-                kafkaTemplate.send(event.getTopic(), event.getAggregateId().toString(), payload).get();
-                event.markPublished(OffsetDateTime.now());
-                outboxEventRepository.save(event);
-            } catch (Exception e) {
-                log.warn("Failed to publish outbox event {}", event.getEventId(), e);
-            }
+        events.forEach(this::publishEvent);
+    }
+
+    @Transactional
+    public boolean publishEvent(OutboxEventEntity event) {
+        try {
+            ApplicationCreatedEvent payload = objectMapper.readValue(event.getPayload(), ApplicationCreatedEvent.class);
+            kafkaTemplate.send(event.getTopic(), event.getAggregateId().toString(), payload).get();
+            event.markPublished(OffsetDateTime.now());
+            outboxEventRepository.save(event);
+            return true;
+        } catch (Exception e) {
+            log.warn("Failed to publish outbox event {}", event.getEventId(), e);
+            return false;
         }
     }
 }

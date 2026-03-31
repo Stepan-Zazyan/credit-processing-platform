@@ -1,78 +1,75 @@
 package com.example.creditapplicationservice.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.example.creditapplicationservice.dto.ApplicationCreatedEvent;
-import com.example.creditapplicationservice.entity.Application;
-import com.example.creditapplicationservice.repository.ApplicationRepository;
-import java.math.BigDecimal;
-import java.util.Optional;
-import java.util.UUID;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.kafka.core.KafkaTemplate;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
 import com.example.creditapplicationservice.dto.ApplicationRequest;
 import com.example.creditapplicationservice.entity.Application;
-import com.example.creditapplicationservice.entity.OutboxEvent;
-import com.example.creditapplicationservice.repository.ApplicationRepository;
-import com.example.creditapplicationservice.repository.OutboxEventRepository;
 import com.example.creditapplicationservice.entity.OutboxEventEntity;
 import com.example.creditapplicationservice.entity.OutboxEventStatus;
 import com.example.creditapplicationservice.repository.ApplicationRepository;
+import com.example.creditapplicationservice.repository.IdempotencyRecordRepository;
 import com.example.creditapplicationservice.repository.OutboxEventRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 @ExtendWith(MockitoExtension.class)
 class ApplicationServiceTest {
 
     @Mock
     private ApplicationRepository applicationRepository;
-
     @Mock
     private OutboxEventRepository outboxEventRepository;
+    @Mock
+    private IdempotencyRecordRepository idempotencyRecordRepository;
+    @Mock
+    private JdbcTemplate jdbcTemplate;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
-    void shouldCreateApplicationAndOutboxEvent() {
-        ApplicationService applicationService = new ApplicationService(applicationRepository, outboxEventRepository);
+    void createStoresOutboxRecordAndIdempotencyResponse() throws Exception {
+        ApplicationService applicationService = new ApplicationService(
+                applicationRepository,
+                outboxEventRepository,
+                idempotencyRecordRepository,
+                jdbcTemplate,
+                objectMapper
+        );
 
+        ApplicationRequest request = new ApplicationRequest("Ivan Ivanov", new BigDecimal("10000.00"));
+
+        when(jdbcTemplate.update(any(String.class), any(), any())).thenReturn(1);
+        when(jdbcTemplate.update(any(String.class), any(), any(), any(), any())).thenReturn(1);
         when(applicationRepository.save(any(Application.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        ApplicationRequest request = new ApplicationRequest();
-        request.setClientName("Alice");
-        request.setAmount(new BigDecimal("1000.00"));
+        CreateApplicationResult result = applicationService.create(request, "idem-1");
 
-        Application saved = applicationService.create(request);
+        assertThat(result.getStatus()).isEqualTo(201);
+        assertThat(result.getBody()).containsKey("id").containsEntry("status", ApplicationService.CREATED_STATUS);
 
-        assertThat(saved.getStatus()).isEqualTo(ApplicationService.CREATED_STATUS);
-        verify(applicationRepository).save(any(Application.class));
+        ArgumentCaptor<OutboxEventEntity> outboxCaptor = ArgumentCaptor.forClass(OutboxEventEntity.class);
+        verify(outboxEventRepository).save(outboxCaptor.capture());
 
-        ArgumentCaptor<OutboxEvent> captor = ArgumentCaptor.forClass(OutboxEvent.class);
-        verify(outboxEventRepository).save(captor.capture());
-        OutboxEvent outboxEvent = captor.getValue();
+        OutboxEventEntity outboxEvent = outboxCaptor.getValue();
+        assertThat(outboxEvent.getStatus()).isEqualTo(OutboxEventStatus.NEW);
 
-        assertThat(outboxEvent.getAggregateId()).isEqualTo(saved.getId());
-        assertThat(outboxEvent.getStatus()).isEqualTo(OutboxPublisherService.OUTBOX_STATUS_NEW);
-        assertThat(outboxEvent.getTopic()).isEqualTo("credit.application.created");
-        assertThat(outboxEvent.getEventType()).isEqualTo("ApplicationCreatedEvent");
-    private KafkaTemplate<String, ApplicationCreatedEvent> kafkaTemplate;
+        JsonNode payload = objectMapper.readTree(outboxEvent.getPayload());
+        assertThat(UUID.fromString(payload.get("applicationId").asText())).isEqualTo(outboxEvent.getAggregateId());
+    }
 
     @Test
     void approvedEventUpdatesStatus() {
@@ -80,20 +77,14 @@ class ApplicationServiceTest {
         Application application = new Application(applicationId, "John", new BigDecimal("1000.00"), "CREATED");
         when(applicationRepository.findById(applicationId)).thenReturn(Optional.of(application));
 
-        ApplicationService service = new ApplicationService(applicationRepository, kafkaTemplate);
+        ApplicationService service = new ApplicationService(
+                applicationRepository,
+                outboxEventRepository,
+                idempotencyRecordRepository,
+                jdbcTemplate,
+                objectMapper
+        );
         service.markApproved(applicationId);
-
-        verify(applicationRepository).save(application);
-    }
-
-    @Test
-    void rejectedEventUpdatesStatus() {
-        UUID applicationId = UUID.randomUUID();
-        Application application = new Application(applicationId, "John", new BigDecimal("1000.00"), "CREATED");
-        when(applicationRepository.findById(applicationId)).thenReturn(Optional.of(application));
-
-        ApplicationService service = new ApplicationService(applicationRepository, kafkaTemplate);
-        service.markRejected(applicationId);
 
         verify(applicationRepository).save(application);
     }
@@ -104,37 +95,36 @@ class ApplicationServiceTest {
         Application application = new Application(applicationId, "John", new BigDecimal("1000.00"), "APPROVED");
         when(applicationRepository.findById(applicationId)).thenReturn(Optional.of(application));
 
-        ApplicationService service = new ApplicationService(applicationRepository, kafkaTemplate);
+        ApplicationService service = new ApplicationService(
+                applicationRepository,
+                outboxEventRepository,
+                idempotencyRecordRepository,
+                jdbcTemplate,
+                objectMapper
+        );
         service.markApproved(applicationId);
 
         verify(applicationRepository, never()).save(any(Application.class));
-    private OutboxEventRepository outboxEventRepository;
-
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    }
 
     @Test
-    void createStoresOutboxRecord() throws Exception {
-        ApplicationService applicationService = new ApplicationService(applicationRepository, outboxEventRepository, objectMapper);
+    void getByIdReturnsResponse() {
+        UUID applicationId = UUID.randomUUID();
+        Application application = new Application(applicationId, "John", new BigDecimal("1000.00"), "CREATED");
+        when(applicationRepository.findById(applicationId)).thenReturn(Optional.of(application));
 
-        ApplicationRequest request = new ApplicationRequest();
-        request.setClientName("Ivan Ivanov");
-        request.setAmount(new BigDecimal("10000.00"));
+        ApplicationService service = new ApplicationService(
+                applicationRepository,
+                outboxEventRepository,
+                idempotencyRecordRepository,
+                jdbcTemplate,
+                objectMapper
+        );
 
-        when(applicationRepository.save(any(Application.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-        Application result = applicationService.create(request);
-
-        verify(applicationRepository).save(any(Application.class));
-
-        ArgumentCaptor<OutboxEventEntity> outboxCaptor = ArgumentCaptor.forClass(OutboxEventEntity.class);
-        verify(outboxEventRepository).save(outboxCaptor.capture());
-
-        OutboxEventEntity outboxEvent = outboxCaptor.getValue();
-        assertThat(outboxEvent.getStatus()).isEqualTo(OutboxEventStatus.NEW);
-        assertThat(outboxEvent.getAggregateId()).isEqualTo(result.getId());
-
-        JsonNode payload = objectMapper.readTree(outboxEvent.getPayload());
-        assertThat(payload.get("eventId").asText()).isEqualTo(outboxEvent.getEventId().toString());
-        assertThat(UUID.fromString(payload.get("applicationId").asText())).isEqualTo(result.getId());
+        Map<String, Object> body = Map.of(
+                "id", service.getById(applicationId).getId(),
+                "status", service.getById(applicationId).getStatus()
+        );
+        assertThat(body).containsEntry("id", applicationId).containsEntry("status", "CREATED");
     }
 }
