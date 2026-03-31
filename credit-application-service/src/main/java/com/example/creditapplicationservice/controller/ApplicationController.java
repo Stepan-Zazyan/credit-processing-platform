@@ -1,13 +1,13 @@
 package com.example.creditapplicationservice.controller;
 
 import com.example.creditapplicationservice.dto.ApplicationRequest;
-import com.example.creditapplicationservice.entity.Application;
 import com.example.creditapplicationservice.service.ApplicationService;
+import com.example.creditapplicationservice.service.CreateApplicationResult;
 import java.util.Map;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -21,12 +21,11 @@ public class ApplicationController {
     }
 
     @PostMapping
-    public ResponseEntity<Map<String, Object>> create(@RequestBody ApplicationRequest request) {
-        Application application = applicationService.create(request);
-        Map<String, Object> body = Map.of(
-                "id", application.getId(),
-                "status", application.getStatus()
-        );
-        return ResponseEntity.status(HttpStatus.CREATED).body(body);
+    public ResponseEntity<Map<String, Object>> create(
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestBody ApplicationRequest request
+    ) {
+        CreateApplicationResult result = applicationService.create(request, idempotencyKey);
+        return ResponseEntity.status(result.getStatus()).body(result.getBody());
     }
 }
