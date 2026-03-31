@@ -2,6 +2,15 @@ server:
   port: 8081
 
 spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/creditdb
+    username: credit
+    password: credit
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    table: flyway_schema_history_scoring
   application:
     name: scoring-service
   kafka:
