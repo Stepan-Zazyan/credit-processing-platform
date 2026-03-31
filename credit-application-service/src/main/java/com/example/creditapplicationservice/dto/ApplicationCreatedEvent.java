@@ -4,7 +4,8 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 public class ApplicationCreatedEvent {
-    private UUID id;
+    private UUID eventId;
+    private UUID applicationId;
     private String clientName;
     private BigDecimal amount;
     private String status;
@@ -12,19 +13,28 @@ public class ApplicationCreatedEvent {
     public ApplicationCreatedEvent() {
     }
 
-    public ApplicationCreatedEvent(UUID id, String clientName, BigDecimal amount, String status) {
-        this.id = id;
+    public ApplicationCreatedEvent(UUID eventId, UUID applicationId, String clientName, BigDecimal amount, String status) {
+        this.eventId = eventId;
+        this.applicationId = applicationId;
         this.clientName = clientName;
         this.amount = amount;
         this.status = status;
     }
 
-    public UUID getId() {
-        return id;
+    public UUID getEventId() {
+        return eventId;
     }
 
-    public void setId(UUID id) {
-        this.id = id;
+    public void setEventId(UUID eventId) {
+        this.eventId = eventId;
+    }
+
+    public UUID getApplicationId() {
+        return applicationId;
+    }
+
+    public void setApplicationId(UUID applicationId) {
+        this.applicationId = applicationId;
     }
 
     public String getClientName() {

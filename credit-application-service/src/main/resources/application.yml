@@ -2,6 +2,8 @@ server:
   port: 8080
 
 spring:
+  application:
+    name: credit-application-service
   datasource:
     url: jdbc:postgresql://localhost:5432/creditdb
     username: credit
@@ -13,11 +15,21 @@ spring:
     enabled: true
   kafka:
     bootstrap-servers: localhost:9092
+    consumer:
+      group-id: credit-application-service
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    listener:
+      ack-mode: manual
     properties:
       spring.json.add.type.headers: false
+      spring.json.trusted.packages: com.example.creditapplicationservice.dto
+      spring.json.value.default.type: com.example.creditapplicationservice.dto.ApplicationDecisionEvent
 
 credit:
   application:
@@ -30,5 +42,29 @@ credit:
       check-stuck-applications: true
 
 logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} level=%-5p service=${spring.application.name} requestId=%X{requestId:-} thread=%t logger=%logger{36} msg=\"%m\"%n"
   level:
     org.springframework.kafka: info
+
+outbox:
+  publisher:
+    fixed-delay-ms: 1000
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+info:
+  app:
+    name: ${spring.application.name}
