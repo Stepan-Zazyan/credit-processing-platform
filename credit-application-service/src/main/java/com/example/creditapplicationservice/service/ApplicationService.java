@@ -1,23 +1,15 @@
 package com.example.creditapplicationservice.service;
 
+import com.example.creditapplicationservice.dto.ApplicationCreatedEvent;
 import com.example.creditapplicationservice.dto.ApplicationRequest;
+import com.example.creditapplicationservice.dto.ApplicationResponse;
 import com.example.creditapplicationservice.entity.Application;
-import com.example.creditapplicationservice.entity.OutboxEvent;
-import com.example.creditapplicationservice.repository.ApplicationRepository;
-import com.example.creditapplicationservice.repository.OutboxEventRepository;
-import java.util.UUID;
+import com.example.creditapplicationservice.entity.IdempotencyRecord;
 import com.example.creditapplicationservice.entity.OutboxEventEntity;
 import com.example.creditapplicationservice.entity.OutboxEventStatus;
 import com.example.creditapplicationservice.repository.ApplicationRepository;
-import com.example.creditapplicationservice.repository.OutboxEventRepository;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import com.example.creditapplicationservice.entity.IdempotencyRecord;
-import com.example.creditapplicationservice.repository.ApplicationRepository;
 import com.example.creditapplicationservice.repository.IdempotencyRecordRepository;
+import com.example.creditapplicationservice.repository.OutboxEventRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -27,10 +19,11 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -38,47 +31,31 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class ApplicationService {
     public static final String CREATED_STATUS = "CREATED";
-    private static final Logger logger = LoggerFactory.getLogger(ApplicationService.class);
-    private static final String CREATED_STATUS = "CREATED";
     private static final String APPROVED_STATUS = "APPROVED";
     private static final String REJECTED_STATUS = "REJECTED";
     private static final String TOPIC = "credit.application.created";
 
+    private static final Logger logger = LoggerFactory.getLogger(ApplicationService.class);
+
     private final ApplicationRepository applicationRepository;
     private final OutboxEventRepository outboxEventRepository;
-
-    public ApplicationService(ApplicationRepository applicationRepository,
-                              OutboxEventRepository outboxEventRepository) {
-        this.applicationRepository = applicationRepository;
-        this.outboxEventRepository = outboxEventRepository;
-    private final ObjectMapper objectMapper;
-
-    public ApplicationService(ApplicationRepository applicationRepository,
-                              OutboxEventRepository outboxEventRepository,
-                              ObjectMapper objectMapper) {
-        this.applicationRepository = applicationRepository;
-        this.outboxEventRepository = outboxEventRepository;
     private final IdempotencyRecordRepository idempotencyRecordRepository;
-    private final KafkaTemplate<String, ApplicationCreatedEvent> kafkaTemplate;
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
 
     public ApplicationService(ApplicationRepository applicationRepository,
+                              OutboxEventRepository outboxEventRepository,
                               IdempotencyRecordRepository idempotencyRecordRepository,
-                              KafkaTemplate<String, ApplicationCreatedEvent> kafkaTemplate,
                               JdbcTemplate jdbcTemplate,
                               ObjectMapper objectMapper) {
         this.applicationRepository = applicationRepository;
+        this.outboxEventRepository = outboxEventRepository;
         this.idempotencyRecordRepository = idempotencyRecordRepository;
-        this.kafkaTemplate = kafkaTemplate;
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
     }
 
     @Transactional
-    public Application create(ApplicationRequest request) {
-        UUID applicationId = UUID.randomUUID();
-        Application application = new Application(applicationId, request.getClientName(), request.getAmount(), CREATED_STATUS);
     public CreateApplicationResult create(ApplicationRequest request, String idempotencyKey) {
         String requestHash = hashRequest(request);
         int inserted = jdbcTemplate.update(
@@ -108,17 +85,16 @@ public class ApplicationService {
             return new CreateApplicationResult(existing.getStatus(), parseBody(existing.getResponseBody()));
         }
 
-        Application created = saveApplicationAndSendEvent(request);
+        Application created = saveApplicationAndStoreOutboxEvent(request);
         Map<String, Object> body = Map.of("id", created.getId(), "status", created.getStatus());
 
-        String responseBody = toJson(body);
         int updated = jdbcTemplate.update(
                 """
                 UPDATE idempotency_records
                 SET response_body = ?, status = ?
                 WHERE key = ? AND request_hash = ?
                 """,
-                responseBody,
+                toJson(body),
                 HttpStatus.CREATED.value(),
                 idempotencyKey,
                 requestHash
@@ -131,17 +107,34 @@ public class ApplicationService {
         return new CreateApplicationResult(HttpStatus.CREATED.value(), body);
     }
 
-    private Application saveApplicationAndSendEvent(ApplicationRequest request) {
-        UUID id = UUID.randomUUID();
-        Application application = new Application(id, request.getClientName(), request.getAmount(), CREATED_STATUS);
+    @Transactional(readOnly = true)
+    public ApplicationResponse getById(UUID id) {
+        Application application = applicationRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Application not found"));
+
+        return new ApplicationResponse(
+                application.getId(),
+                application.getClientName(),
+                application.getAmount(),
+                application.getStatus()
+        );
+    }
+
+    @Transactional
+    public void markApproved(UUID applicationId) {
+        updateStatus(applicationId, APPROVED_STATUS);
+    }
+
+    @Transactional
+    public void markRejected(UUID applicationId) {
+        updateStatus(applicationId, REJECTED_STATUS);
+    }
+
+    private Application saveApplicationAndStoreOutboxEvent(ApplicationRequest request) {
+        UUID applicationId = UUID.randomUUID();
+        Application application = new Application(applicationId, request.getClientName(), request.getAmount(), CREATED_STATUS);
         Application saved = applicationRepository.save(application);
 
-        OutboxEvent outboxEvent = new OutboxEvent(
-                UUID.randomUUID(),
-                saved.getId(),
-                TOPIC,
-                "ApplicationCreatedEvent",
-                OutboxPublisherService.OUTBOX_STATUS_NEW
         UUID eventId = UUID.randomUUID();
         ApplicationCreatedEvent eventPayload = new ApplicationCreatedEvent(
                 eventId,
@@ -164,16 +157,6 @@ public class ApplicationService {
         return saved;
     }
 
-    @Transactional
-    public void markApproved(UUID applicationId) {
-        updateStatus(applicationId, APPROVED_STATUS);
-    }
-
-    @Transactional
-    public void markRejected(UUID applicationId) {
-        updateStatus(applicationId, REJECTED_STATUS);
-    }
-
     private void updateStatus(UUID applicationId, String targetStatus) {
         if (applicationId == null) {
             logger.warn("Skipping decision processing: applicationId is null");
@@ -191,11 +174,8 @@ public class ApplicationService {
                     applicationRepository.save(application);
                     logger.info("Application {} status updated to {}", applicationId, targetStatus);
                 }, () -> logger.warn("Application {} not found, decision event ignored", applicationId));
-    private String toJson(ApplicationCreatedEvent eventPayload) {
-        try {
-            return objectMapper.writeValueAsString(eventPayload);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Could not serialize application created event", e);
+    }
+
     private String hashRequest(ApplicationRequest request) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -209,20 +189,19 @@ public class ApplicationService {
 
     private Map<String, Object> parseBody(String responseBody) {
         try {
-            return objectMapper.readValue(responseBody, new TypeReference<>() {
-            });
+            return objectMapper.readValue(responseBody, new TypeReference<>() { });
         } catch (JsonProcessingException e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Stored idempotent response is invalid", e);
         }
     }
 
-    private String toJson(Map<String, Object> body) {
+    private String toJson(Object body) {
         try {
             return objectMapper.writeValueAsString(body);
         } catch (JsonProcessingException e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Failed to serialize idempotent response", e);
+                    "Failed to serialize payload", e);
         }
     }
 }

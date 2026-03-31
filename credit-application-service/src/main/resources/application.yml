@@ -33,13 +33,14 @@ spring:
 
 credit:
   application:
-    outbox:
-      publisher:
-        polling-interval-ms: 5000
     repair:
       threshold: 2m
       polling-interval-ms: 30000
       check-stuck-applications: true
+
+outbox:
+  publisher:
+    fixed-delay-ms: 1000
 
 logging:
   pattern:
@@ -47,9 +48,6 @@ logging:
   level:
     org.springframework.kafka: info
 
-outbox:
-  publisher:
-    fixed-delay-ms: 1000
 management:
   endpoints:
     web:

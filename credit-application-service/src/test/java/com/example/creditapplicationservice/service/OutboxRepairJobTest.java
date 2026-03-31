@@ -8,7 +8,8 @@ import static org.mockito.Mockito.when;
 
 import com.example.creditapplicationservice.config.RepairJobProperties;
 import com.example.creditapplicationservice.entity.Application;
-import com.example.creditapplicationservice.entity.OutboxEvent;
+import com.example.creditapplicationservice.entity.OutboxEventEntity;
+import com.example.creditapplicationservice.entity.OutboxEventStatus;
 import com.example.creditapplicationservice.repository.ApplicationRepository;
 import com.example.creditapplicationservice.repository.OutboxEventRepository;
 import java.math.BigDecimal;
@@ -31,7 +32,7 @@ class OutboxRepairJobTest {
     private ApplicationRepository applicationRepository;
 
     @Mock
-    private OutboxPublisherService outboxPublisherService;
+    private OutboxPublisher outboxPublisher;
 
     @Test
     void shouldRepublishStaleNewEventsAndCheckStuckApplications() {
@@ -39,26 +40,27 @@ class OutboxRepairJobTest {
         properties.setThreshold(Duration.ofMinutes(10));
         properties.setCheckStuckApplications(true);
 
-        OutboxRepairJob job = new OutboxRepairJob(properties, outboxEventRepository, applicationRepository, outboxPublisherService);
+        OutboxRepairJob job = new OutboxRepairJob(properties, outboxEventRepository, applicationRepository, outboxPublisher);
 
-        OutboxEvent staleEvent = new OutboxEvent(
+        OutboxEventEntity staleEvent = new OutboxEventEntity(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
                 "credit.application.created",
                 "ApplicationCreatedEvent",
-                OutboxPublisherService.OUTBOX_STATUS_NEW
+                "{}",
+                OutboxEventStatus.NEW
         );
 
         Application staleApplication = new Application(UUID.randomUUID(), "John", BigDecimal.TEN, ApplicationService.CREATED_STATUS);
 
-        when(outboxEventRepository.findTop100ByStatusAndCreatedAtBeforeOrderByCreatedAtAsc(eq(OutboxPublisherService.OUTBOX_STATUS_NEW), any(OffsetDateTime.class)))
+        when(outboxEventRepository.findTop100ByStatusAndCreatedAtBeforeOrderByCreatedAtAsc(eq(OutboxEventStatus.NEW), any(OffsetDateTime.class)))
                 .thenReturn(List.of(staleEvent));
         when(applicationRepository.findTop100ByStatusAndCreatedAtBeforeOrderByCreatedAtAsc(eq(ApplicationService.CREATED_STATUS), any(OffsetDateTime.class)))
                 .thenReturn(List.of(staleApplication));
 
         job.reconcile();
 
-        verify(outboxPublisherService).publishEvent(staleEvent);
+        verify(outboxPublisher).publishEvent(staleEvent);
         verify(applicationRepository).findTop100ByStatusAndCreatedAtBeforeOrderByCreatedAtAsc(eq(ApplicationService.CREATED_STATUS), any(OffsetDateTime.class));
     }
 
@@ -67,9 +69,9 @@ class OutboxRepairJobTest {
         RepairJobProperties properties = new RepairJobProperties();
         properties.setCheckStuckApplications(false);
 
-        OutboxRepairJob job = new OutboxRepairJob(properties, outboxEventRepository, applicationRepository, outboxPublisherService);
+        OutboxRepairJob job = new OutboxRepairJob(properties, outboxEventRepository, applicationRepository, outboxPublisher);
 
-        when(outboxEventRepository.findTop100ByStatusAndCreatedAtBeforeOrderByCreatedAtAsc(eq(OutboxPublisherService.OUTBOX_STATUS_NEW), any(OffsetDateTime.class)))
+        when(outboxEventRepository.findTop100ByStatusAndCreatedAtBeforeOrderByCreatedAtAsc(eq(OutboxEventStatus.NEW), any(OffsetDateTime.class)))
                 .thenReturn(List.of());
 
         job.reconcile();

@@ -35,9 +35,9 @@ public class ApplicationScoringListener {
         idempotentEventProcessor.process(eventId, () -> {
             String decision = evaluate(event.getAmount());
             String topic = "APPROVED".equals(decision) ? APPROVED_TOPIC : REJECTED_TOPIC;
-            ApplicationDecisionEvent decisionEvent = new ApplicationDecisionEvent(event.getId(), decision);
-            kafkaTemplate.send(topic, eventId, decisionEvent);
-            logger.info("Scoring finished for application {} with decision {}", event.getId(), decision);
+            ApplicationDecisionEvent decisionEvent = new ApplicationDecisionEvent(event.getApplicationId(), decision);
+            kafkaTemplate.send(topic, event.getApplicationId().toString(), decisionEvent);
+            logger.info("Scoring finished for application {} with decision {}", event.getApplicationId(), decision);
         });
         acknowledgment.acknowledge();
     }
