@@ -28,7 +28,7 @@ services:
     image: postgres:15
     environment:
       POSTGRES_DB: creditdb
-      POSTGRES_USER: credit
-      POSTGRES_PASSWORD: credit
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"

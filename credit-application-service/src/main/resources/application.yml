@@ -6,8 +6,8 @@ spring:
     name: credit-application-service
   datasource:
     url: jdbc:postgresql://localhost:5432/creditdb
-    username: credit
-    password: credit
+    username: postgres
+    password: postgres
   jpa:
     hibernate:
       ddl-auto: validate

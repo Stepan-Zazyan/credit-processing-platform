@@ -64,7 +64,7 @@ public class ApplicationService {
     public CreateApplicationResult create(ApplicationRequest request, String idempotencyKey) {
         ScoringDecisionResponse scoringDecision = safeScoringDecision(request.getClientName());
         logger.info("Scoring decision for clientName={} decision={} fallback={}",
-                request.getClientName(), scoringDecision.decision(), scoringDecision.fallback());
+                request.getClientName(), scoringDecision.getDecision(), ScoringDecisionResponse.fallback());
 
         String requestHash = hashRequest(request);
         int inserted = jdbcTemplate.update(
