@@ -66,3 +66,32 @@ management:
 info:
   app:
     name: ${spring.application.name}
+
+downstream:
+  scoring:
+    base-url: http://localhost:8081
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      scoringClient:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 4
+        minimumNumberOfCalls: 4
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 2
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+  retry:
+    instances:
+      scoringClient:
+        maxAttempts: 3
+        waitDuration: 200ms
+        retryExceptions:
+          - org.springframework.web.client.RestClientException
+          - java.util.concurrent.TimeoutException
+  timelimiter:
+    instances:
+      scoringClient:
+        timeoutDuration: 500ms
+        cancelRunningFuture: true
