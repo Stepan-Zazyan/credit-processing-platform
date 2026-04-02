@@ -7,9 +7,16 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "applications")
+@Getter
+@Setter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Application {
     @Id
     private UUID id;
@@ -26,37 +33,10 @@ public class Application {
     @Column(name = "created_at", insertable = false, updatable = false)
     private OffsetDateTime createdAt;
 
-    protected Application() {
-    }
-
     public Application(UUID id, String clientName, BigDecimal amount, String status) {
         this.id = id;
         this.clientName = clientName;
         this.amount = amount;
-        this.status = status;
-    }
-
-    public UUID getId() {
-        return id;
-    }
-
-    public String getClientName() {
-        return clientName;
-    }
-
-    public BigDecimal getAmount() {
-        return amount;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setStatus(String status) {
         this.status = status;
     }
 }
