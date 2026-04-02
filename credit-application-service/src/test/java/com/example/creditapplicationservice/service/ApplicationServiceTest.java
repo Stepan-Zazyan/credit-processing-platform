@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.example.creditapplicationservice.dto.ApplicationRequest;
+import com.example.creditapplicationservice.dto.ScoringDecisionResponse;
 import com.example.creditapplicationservice.entity.Application;
 import com.example.creditapplicationservice.entity.OutboxEventEntity;
 import com.example.creditapplicationservice.entity.OutboxEventStatus;
@@ -19,6 +20,7 @@ import java.math.BigDecimal;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -37,6 +39,8 @@ class ApplicationServiceTest {
     private IdempotencyRecordRepository idempotencyRecordRepository;
     @Mock
     private JdbcTemplate jdbcTemplate;
+    @Mock
+    private ScoringClient scoringClient;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -47,7 +51,8 @@ class ApplicationServiceTest {
                 outboxEventRepository,
                 idempotencyRecordRepository,
                 jdbcTemplate,
-                objectMapper
+                objectMapper,
+                scoringClient
         );
 
         ApplicationRequest request = new ApplicationRequest("Ivan Ivanov", new BigDecimal("10000.00"));
@@ -55,6 +60,7 @@ class ApplicationServiceTest {
         when(jdbcTemplate.update(any(String.class), any(), any())).thenReturn(1);
         when(jdbcTemplate.update(any(String.class), any(), any(), any(), any())).thenReturn(1);
         when(applicationRepository.save(any(Application.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(scoringClient.getDecision(any())).thenReturn(CompletableFuture.completedFuture(new ScoringDecisionResponse("APPROVE", false)));
 
         CreateApplicationResult result = applicationService.create(request, "idem-1");
 
@@ -82,7 +88,8 @@ class ApplicationServiceTest {
                 outboxEventRepository,
                 idempotencyRecordRepository,
                 jdbcTemplate,
-                objectMapper
+                objectMapper,
+                scoringClient
         );
         service.markApproved(applicationId);
 
@@ -100,7 +107,8 @@ class ApplicationServiceTest {
                 outboxEventRepository,
                 idempotencyRecordRepository,
                 jdbcTemplate,
-                objectMapper
+                objectMapper,
+                scoringClient
         );
         service.markApproved(applicationId);
 
@@ -118,7 +126,8 @@ class ApplicationServiceTest {
                 outboxEventRepository,
                 idempotencyRecordRepository,
                 jdbcTemplate,
-                objectMapper
+                objectMapper,
+                scoringClient
         );
 
         Map<String, Object> body = Map.of(

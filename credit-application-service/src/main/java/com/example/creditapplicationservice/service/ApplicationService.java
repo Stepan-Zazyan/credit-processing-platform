@@ -3,6 +3,7 @@ package com.example.creditapplicationservice.service;
 import com.example.creditapplicationservice.dto.ApplicationCreatedEvent;
 import com.example.creditapplicationservice.dto.ApplicationRequest;
 import com.example.creditapplicationservice.dto.ApplicationResponse;
+import com.example.creditapplicationservice.dto.ScoringDecisionResponse;
 import com.example.creditapplicationservice.entity.Application;
 import com.example.creditapplicationservice.entity.IdempotencyRecord;
 import com.example.creditapplicationservice.entity.OutboxEventEntity;
@@ -19,6 +20,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -42,21 +44,28 @@ public class ApplicationService {
     private final IdempotencyRecordRepository idempotencyRecordRepository;
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final ScoringClient scoringClient;
 
     public ApplicationService(ApplicationRepository applicationRepository,
                               OutboxEventRepository outboxEventRepository,
                               IdempotencyRecordRepository idempotencyRecordRepository,
                               JdbcTemplate jdbcTemplate,
-                              ObjectMapper objectMapper) {
+                              ObjectMapper objectMapper,
+                              ScoringClient scoringClient) {
         this.applicationRepository = applicationRepository;
         this.outboxEventRepository = outboxEventRepository;
         this.idempotencyRecordRepository = idempotencyRecordRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
+        this.scoringClient = scoringClient;
     }
 
     @Transactional
     public CreateApplicationResult create(ApplicationRequest request, String idempotencyKey) {
+        ScoringDecisionResponse scoringDecision = safeScoringDecision(request.getClientName());
+        logger.info("Scoring decision for clientName={} decision={} fallback={}",
+                request.getClientName(), scoringDecision.decision(), scoringDecision.fallback());
+
         String requestHash = hashRequest(request);
         int inserted = jdbcTemplate.update(
                 """
@@ -105,6 +114,15 @@ public class ApplicationService {
         }
 
         return new CreateApplicationResult(HttpStatus.CREATED.value(), body);
+    }
+
+    private ScoringDecisionResponse safeScoringDecision(String clientName) {
+        try {
+            return scoringClient.getDecision(clientName).join();
+        } catch (CompletionException ex) {
+            logger.warn("Scoring call failed for clientName={}, using local fallback", clientName, ex);
+            return ScoringDecisionResponse.fallback();
+        }
     }
 
     @Transactional(readOnly = true)
