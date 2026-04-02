@@ -5,9 +5,14 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "idempotency_records")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class IdempotencyRecord {
     @Id
     @Column(name = "key", nullable = false, length = 255)
@@ -25,33 +30,10 @@ public class IdempotencyRecord {
     @Column(name = "created_at", insertable = false, updatable = false)
     private OffsetDateTime createdAt;
 
-    protected IdempotencyRecord() {
-    }
-
     public IdempotencyRecord(String key, String requestHash, String responseBody, Integer status) {
         this.key = key;
         this.requestHash = requestHash;
         this.responseBody = responseBody;
         this.status = status;
-    }
-
-    public String getKey() {
-        return key;
-    }
-
-    public String getRequestHash() {
-        return requestHash;
-    }
-
-    public String getResponseBody() {
-        return responseBody;
-    }
-
-    public Integer getStatus() {
-        return status;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
     }
 }

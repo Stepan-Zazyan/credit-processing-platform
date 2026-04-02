@@ -8,9 +8,14 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
 import java.util.UUID;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "outbox_event")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class OutboxEventEntity {
 
     @Id
@@ -39,9 +44,6 @@ public class OutboxEventEntity {
     @Column(name = "published_at")
     private OffsetDateTime publishedAt;
 
-    protected OutboxEventEntity() {
-    }
-
     public OutboxEventEntity(UUID eventId, UUID aggregateId, String topic, String eventType, String payload,
                              OutboxEventStatus status) {
         this.eventId = eventId;
@@ -50,38 +52,6 @@ public class OutboxEventEntity {
         this.eventType = eventType;
         this.payload = payload;
         this.status = status;
-    }
-
-    public UUID getEventId() {
-        return eventId;
-    }
-
-    public UUID getAggregateId() {
-        return aggregateId;
-    }
-
-    public String getTopic() {
-        return topic;
-    }
-
-    public String getEventType() {
-        return eventType;
-    }
-
-    public String getPayload() {
-        return payload;
-    }
-
-    public OutboxEventStatus getStatus() {
-        return status;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public OffsetDateTime getPublishedAt() {
-        return publishedAt;
     }
 
     public void markPublished(OffsetDateTime publishedAt) {
