@@ -3,7 +3,7 @@ server:
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5433/creditdb?currentSchema=scoring
+    url: jdbc:postgresql://localhost:5433/scoringdb?currentSchema=scoring
     username: postgres
     password: postgres
   jpa:
