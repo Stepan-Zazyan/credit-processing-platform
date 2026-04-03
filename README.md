@@ -14,18 +14,18 @@
 docker-compose up -d
 ```
 
-Kafka будет доступна на `localhost:9092`, Postgres — на `localhost:5432` (db=`creditdb`, user=`credit`, pass=`credit`).
+Kafka будет доступна на `localhost:9092`, Postgres — на `localhost:5433` (db=`creditdb`, user=`postgres`, pass=`postgres`).
 
 2. Запустите сервисы из IDE (или через Maven), по портам:
 
-- `credit-application-service` — `8080`
+- `credit-application-service` — `8085`
 - `scoring-service` — `8081`
 - `notification-service` — `8082`
 
 ## Пример запроса
 
 ```bash
-curl -X POST http://localhost:8080/applications \
+curl -X POST http://localhost:8085/applications \
   -H 'Content-Type: application/json' \
   -d '{"clientName":"Иван Иванов","amount":7500.00}'
 ```
@@ -36,6 +36,31 @@ curl -X POST http://localhost:8080/applications \
 - в Kafka топик `credit.application.created` уходит событие;
 - `scoring-service` публикует решение в `credit.application.approved` или `credit.application.rejected`;
 - `notification-service` логирует `Notification sent...`.
+
+
+
+## Консистентная локальная БД-архитектура
+
+Для локального запуска используется **одна база `creditdb` и отдельная schema на сервис**:
+
+- `credit-application-service` → schema `credit_application`
+- `scoring-service` → schema `scoring`
+- `notification-service` → schema `notification`
+
+Каждый сервис хранит свои таблицы и свою `flyway_schema_history` внутри собственной schema, поэтому миграции и JPA-валидация не конфликтуют между сервисами.
+
+Перед первым стартом (или после смены конфигурации) можно полностью очистить локальную БД:
+
+```bash
+docker compose down -v
+docker compose up -d postgres
+```
+
+После этого запускайте сервисы в порядке:
+
+1. `credit-application-service`
+2. `scoring-service`
+3. `notification-service`
 
 ## Retry и DLQ
 

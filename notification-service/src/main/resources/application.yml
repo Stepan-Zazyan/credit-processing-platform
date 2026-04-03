@@ -3,16 +3,22 @@ server:
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5433/creditdb
+    url: jdbc:postgresql://localhost:5433/creditdb?currentSchema=notification
     username: postgres
     password: postgres
   jpa:
     hibernate:
       ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: notification
   flyway:
+    enabled: true
+    create-schemas: true
     schemas: notification
     default-schema: notification
-    table: flyway_schema_history_notification
+    table: flyway_schema_history
+    locations: classpath:db/migration
   application:
     name: notification-service
   kafka:
