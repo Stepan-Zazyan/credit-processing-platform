@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class ScoringController {
 
     @GetMapping("/decision")
-    public ScoringDecisionResponse getDecision(@RequestParam String clientName) {
+    public ScoringDecisionResponse getDecision(@RequestParam("clientName") String clientName) {
         String normalized = clientName == null ? "" : clientName.toLowerCase(Locale.ROOT);
         String decision = normalized.length() % 2 == 0 ? "APPROVE" : "REVIEW";
         return new ScoringDecisionResponse(decision, false);
