@@ -3,16 +3,22 @@ server:
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5433/creditdb
+    url: jdbc:postgresql://localhost:5433/creditdb?currentSchema=scoring
     username: postgres
     password: postgres
   jpa:
     hibernate:
       ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: scoring
   flyway:
+    enabled: true
+    create-schemas: true
     schemas: scoring
     default-schema: scoring
-    table: flyway_schema_history_scoring
+    table: flyway_schema_history
+    locations: classpath:db/migration
   application:
     name: scoring-service
   kafka:

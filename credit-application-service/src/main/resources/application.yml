@@ -5,14 +5,22 @@ spring:
   application:
     name: credit-application-service
   datasource:
-    url: jdbc:postgresql://localhost:5433/creditdb
+    url: jdbc:postgresql://localhost:5433/creditdb?currentSchema=credit_application
     username: postgres
     password: postgres
   jpa:
     hibernate:
       ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: credit_application
   flyway:
     enabled: true
+    create-schemas: true
+    schemas: credit_application
+    default-schema: credit_application
+    table: flyway_schema_history
+    locations: classpath:db/migration
   kafka:
     bootstrap-servers: localhost:9092
     consumer:
