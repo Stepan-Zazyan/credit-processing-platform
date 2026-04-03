@@ -3,7 +3,7 @@ server:
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5433/creditdb?currentSchema=notification
+    url: jdbc:postgresql://localhost:5433/notificationdb?currentSchema=notification
     username: postgres
     password: postgres
   jpa:
