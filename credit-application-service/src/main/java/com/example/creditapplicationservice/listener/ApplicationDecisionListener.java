@@ -2,16 +2,14 @@ package com.example.creditapplicationservice.listener;
 
 import com.example.creditapplicationservice.dto.ApplicationDecisionEvent;
 import com.example.creditapplicationservice.service.ApplicationService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
 
 @Component
+@Slf4j
 public class ApplicationDecisionListener {
-    private static final Logger logger = LoggerFactory.getLogger(ApplicationDecisionListener.class);
-
     private final ApplicationService applicationService;
 
     public ApplicationDecisionListener(ApplicationService applicationService) {
@@ -21,14 +19,14 @@ public class ApplicationDecisionListener {
     @KafkaListener(topics = "credit.application.approved", groupId = "credit-application-service")
     public void onApproved(ApplicationDecisionEvent event, Acknowledgment acknowledgment) {
         applicationService.markApproved(event.getApplicationId());
-        logger.info("Processed approved decision eventId={} applicationId={}", event.getEventId(), event.getApplicationId());
+        log.info("Processed approved decision eventId={} applicationId={}", event.getEventId(), event.getApplicationId());
         acknowledgment.acknowledge();
     }
 
     @KafkaListener(topics = "credit.application.rejected", groupId = "credit-application-service")
     public void onRejected(ApplicationDecisionEvent event, Acknowledgment acknowledgment) {
         applicationService.markRejected(event.getApplicationId());
-        logger.info("Processed rejected decision eventId={} applicationId={} reason={}",
+        log.info("Processed rejected decision eventId={} applicationId={} reason={}",
                 event.getEventId(), event.getApplicationId(), event.getReason());
         acknowledgment.acknowledge();
     }

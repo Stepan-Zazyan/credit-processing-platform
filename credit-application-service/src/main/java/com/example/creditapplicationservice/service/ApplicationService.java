@@ -21,8 +21,7 @@ import java.util.HexFormat;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletionException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -31,13 +30,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
+@Slf4j
 public class ApplicationService {
     public static final String CREATED_STATUS = "CREATED";
     private static final String APPROVED_STATUS = "APPROVED";
     private static final String REJECTED_STATUS = "REJECTED";
     private static final String TOPIC = "credit.application.created";
-
-    private static final Logger logger = LoggerFactory.getLogger(ApplicationService.class);
 
     private final ApplicationRepository applicationRepository;
     private final OutboxEventRepository outboxEventRepository;
@@ -63,7 +61,7 @@ public class ApplicationService {
     @Transactional
     public CreateApplicationResult create(ApplicationRequest request, String idempotencyKey) {
         ScoringDecisionResponse scoringDecision = safeScoringDecision(request.getClientName());
-        logger.info("Scoring decision for clientName={} decision={} fallback={}",
+        log.info("Scoring decision for clientName={} decision={} fallback={}",
                 request.getClientName(), scoringDecision.getDecision(), ScoringDecisionResponse.fallback());
 
         String requestHash = hashRequest(request);
@@ -120,7 +118,7 @@ public class ApplicationService {
         try {
             return scoringClient.getDecision(clientName).join();
         } catch (CompletionException ex) {
-            logger.warn("Scoring call failed for clientName={}, using local fallback", clientName, ex);
+            log.warn("Scoring call failed for clientName={}, using local fallback", clientName, ex);
             return ScoringDecisionResponse.fallback();
         }
     }
@@ -177,21 +175,21 @@ public class ApplicationService {
 
     private void updateStatus(UUID applicationId, String targetStatus) {
         if (applicationId == null) {
-            logger.warn("Skipping decision processing: applicationId is null");
+            log.warn("Skipping decision processing: applicationId is null");
             return;
         }
 
         applicationRepository.findById(applicationId)
                 .ifPresentOrElse(application -> {
                     if (targetStatus.equals(application.getStatus())) {
-                        logger.info("Duplicate decision received for application {} with status {}, skipping update",
+                        log.info("Duplicate decision received for application {} with status {}, skipping update",
                                 applicationId, targetStatus);
                         return;
                     }
                     application.setStatus(targetStatus);
                     applicationRepository.save(application);
-                    logger.info("Application {} status updated to {}", applicationId, targetStatus);
-                }, () -> logger.warn("Application {} not found, decision event ignored", applicationId));
+                    log.info("Application {} status updated to {}", applicationId, targetStatus);
+                }, () -> log.warn("Application {} not found, decision event ignored", applicationId));
     }
 
     private String hashRequest(ApplicationRequest request) {

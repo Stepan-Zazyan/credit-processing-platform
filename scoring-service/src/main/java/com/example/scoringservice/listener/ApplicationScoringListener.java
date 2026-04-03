@@ -4,16 +4,15 @@ import com.example.scoringservice.dto.ApplicationCreatedEvent;
 import com.example.scoringservice.dto.ApplicationDecisionEvent;
 import com.example.scoringservice.service.IdempotentEventProcessor;
 import java.math.BigDecimal;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
 
 @Component
+@Slf4j
 public class ApplicationScoringListener {
-    private static final Logger logger = LoggerFactory.getLogger(ApplicationScoringListener.class);
     private static final String APPROVED_TOPIC = "credit.application.approved";
     private static final String REJECTED_TOPIC = "credit.application.rejected";
     private static final BigDecimal APPROVAL_THRESHOLD = new BigDecimal("10000.00");
@@ -37,7 +36,7 @@ public class ApplicationScoringListener {
             String topic = "APPROVED".equals(decision) ? APPROVED_TOPIC : REJECTED_TOPIC;
             ApplicationDecisionEvent decisionEvent = new ApplicationDecisionEvent(event.getApplicationId(), decision);
             kafkaTemplate.send(topic, event.getApplicationId().toString(), decisionEvent);
-            logger.info("Scoring finished for application {} with decision {}", event.getApplicationId(), decision);
+            log.info("Scoring finished for application {} with decision {}", event.getApplicationId(), decision);
         });
         acknowledgment.acknowledge();
     }
