@@ -3,7 +3,7 @@ CREATE TABLE outbox_event (
     aggregate_id UUID NOT NULL,
     topic VARCHAR(255) NOT NULL,
     event_type VARCHAR(255) NOT NULL,
-    payload JSONB NOT NULL,
+    payload TEXT NOT NULL,
     status VARCHAR(32) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     published_at TIMESTAMPTZ
