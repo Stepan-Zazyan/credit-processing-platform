@@ -1,11 +1,11 @@
 server:
-  port: 8080
+  port: 8085
 
 spring:
   application:
     name: credit-application-service
   datasource:
-    url: jdbc:postgresql://localhost:5432/creditdb
+    url: jdbc:postgresql://localhost:5433/creditdb
     username: postgres
     password: postgres
   jpa:

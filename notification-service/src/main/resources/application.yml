@@ -3,13 +3,15 @@ server:
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/creditdb
+    url: jdbc:postgresql://localhost:5433/creditdb
     username: postgres
     password: postgres
   jpa:
     hibernate:
       ddl-auto: validate
   flyway:
+    schemas: notification
+    default-schema: notification
     table: flyway_schema_history_notification
   application:
     name: notification-service
