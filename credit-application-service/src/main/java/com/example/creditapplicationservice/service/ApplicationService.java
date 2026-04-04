@@ -5,9 +5,11 @@ import com.example.creditapplicationservice.dto.ApplicationRequest;
 import com.example.creditapplicationservice.dto.ApplicationResponse;
 import com.example.creditapplicationservice.dto.ScoringDecisionResponse;
 import com.example.creditapplicationservice.entity.Application;
+import com.example.creditapplicationservice.entity.ApplicationStatus;
 import com.example.creditapplicationservice.entity.IdempotencyRecord;
 import com.example.creditapplicationservice.entity.OutboxEventEntity;
 import com.example.creditapplicationservice.entity.OutboxEventStatus;
+import com.example.creditapplicationservice.mapper.ApplicationMapper;
 import com.example.creditapplicationservice.repository.ApplicationRepository;
 import com.example.creditapplicationservice.repository.IdempotencyRecordRepository;
 import com.example.creditapplicationservice.repository.OutboxEventRepository;
@@ -15,48 +17,30 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletionException;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class ApplicationService {
-    public static final String CREATED_STATUS = "CREATED";
-    private static final String APPROVED_STATUS = "APPROVED";
-    private static final String REJECTED_STATUS = "REJECTED";
+    private static final int IN_PROGRESS_STATUS = 0;
     private static final String TOPIC = "credit.application.created";
 
     private final ApplicationRepository applicationRepository;
     private final OutboxEventRepository outboxEventRepository;
     private final IdempotencyRecordRepository idempotencyRecordRepository;
-    private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final ScoringClient scoringClient;
-
-    public ApplicationService(ApplicationRepository applicationRepository,
-                              OutboxEventRepository outboxEventRepository,
-                              IdempotencyRecordRepository idempotencyRecordRepository,
-                              JdbcTemplate jdbcTemplate,
-                              ObjectMapper objectMapper,
-                              ScoringClient scoringClient) {
-        this.applicationRepository = applicationRepository;
-        this.outboxEventRepository = outboxEventRepository;
-        this.idempotencyRecordRepository = idempotencyRecordRepository;
-        this.jdbcTemplate = jdbcTemplate;
-        this.objectMapper = objectMapper;
-        this.scoringClient = scoringClient;
-    }
+    private final ApplicationMapper applicationMapper;
 
     @Transactional
     public CreateApplicationResult create(ApplicationRequest request, String idempotencyKey) {
@@ -64,17 +48,8 @@ public class ApplicationService {
         log.info("Scoring decision for clientName={} decision={} fallback={}",
                 request.getClientName(), scoringDecision.getDecision(), ScoringDecisionResponse.fallback());
 
-        String requestHash = hashRequest(request);
-        int inserted = jdbcTemplate.update(
-                """
-                INSERT INTO idempotency_records (key, request_hash, response_body, status)
-                VALUES (?, ?, '{}', 0)
-                ON CONFLICT DO NOTHING
-                """,
-                idempotencyKey, requestHash
-        );
-
-        if (inserted == 0) {
+        String requestHash = buildRequestFingerprint(request);
+        if (!startIdempotentRequest(idempotencyKey, requestHash)) {
             IdempotencyRecord existing = idempotencyRecordRepository.findById(idempotencyKey)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                             "Idempotency record not found"));
@@ -84,7 +59,7 @@ public class ApplicationService {
                         "Idempotency-Key уже использован с другим телом запроса");
             }
 
-            if (existing.getStatus() == 0) {
+            if (existing.getStatus() == IN_PROGRESS_STATUS) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
                         "Запрос с этим Idempotency-Key уже обрабатывается");
             }
@@ -93,23 +68,13 @@ public class ApplicationService {
         }
 
         Application created = saveApplicationAndStoreOutboxEvent(request);
-        Map<String, Object> body = Map.of("id", created.getId(), "status", created.getStatus());
+        Map<String, Object> body = Map.of("id", created.getId(), "status", created.getStatus().name());
 
-        int updated = jdbcTemplate.update(
-                """
-                UPDATE idempotency_records
-                SET response_body = ?, status = ?
-                WHERE key = ? AND request_hash = ?
-                """,
-                toJson(body),
-                HttpStatus.CREATED.value(),
-                idempotencyKey,
-                requestHash
-        );
-
-        if (updated != 1) {
-            throw new DataIntegrityViolationException("Failed to update idempotency record");
-        }
+        IdempotencyRecord record = idempotencyRecordRepository.findById(idempotencyKey)
+                .orElseThrow(() -> new DataIntegrityViolationException("Failed to find idempotency record"));
+        record.setResponseBody(toJson(body));
+        record.setStatus(HttpStatus.CREATED.value());
+        idempotencyRecordRepository.save(record);
 
         return new CreateApplicationResult(HttpStatus.CREATED.value(), body);
     }
@@ -127,28 +92,22 @@ public class ApplicationService {
     public ApplicationResponse getById(UUID id) {
         Application application = applicationRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Application not found"));
-
-        return new ApplicationResponse(
-                application.getId(),
-                application.getClientName(),
-                application.getAmount(),
-                application.getStatus()
-        );
+        return applicationMapper.toResponse(application);
     }
 
     @Transactional
     public void markApproved(UUID applicationId) {
-        updateStatus(applicationId, APPROVED_STATUS);
+        updateStatus(applicationId, ApplicationStatus.APPROVED);
     }
 
     @Transactional
     public void markRejected(UUID applicationId) {
-        updateStatus(applicationId, REJECTED_STATUS);
+        updateStatus(applicationId, ApplicationStatus.REJECTED);
     }
 
     private Application saveApplicationAndStoreOutboxEvent(ApplicationRequest request) {
         UUID applicationId = UUID.randomUUID();
-        Application application = new Application(applicationId, request.getClientName(), request.getAmount(), CREATED_STATUS);
+        Application application = new Application(applicationId, request.getClientName(), request.getAmount(), ApplicationStatus.CREATED);
         Application saved = applicationRepository.save(application);
 
         UUID eventId = UUID.randomUUID();
@@ -157,7 +116,7 @@ public class ApplicationService {
                 saved.getId(),
                 saved.getClientName(),
                 saved.getAmount(),
-                saved.getStatus()
+                saved.getStatus().name()
         );
 
         OutboxEventEntity outboxEvent = new OutboxEventEntity(
@@ -173,7 +132,7 @@ public class ApplicationService {
         return saved;
     }
 
-    private void updateStatus(UUID applicationId, String targetStatus) {
+    private void updateStatus(UUID applicationId, ApplicationStatus targetStatus) {
         if (applicationId == null) {
             log.warn("Skipping decision processing: applicationId is null");
             return;
@@ -192,15 +151,20 @@ public class ApplicationService {
                 }, () -> log.warn("Application {} not found, decision event ignored", applicationId));
     }
 
-    private String hashRequest(ApplicationRequest request) {
+    private boolean startIdempotentRequest(String idempotencyKey, String requestHash) {
         try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            String payload = request.getClientName() + "|" + request.getAmount();
-            byte[] hash = digest.digest(payload.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(hash);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 algorithm unavailable", e);
+            idempotencyRecordRepository.saveAndFlush(
+                    new IdempotencyRecord(idempotencyKey, requestHash, "{}", IN_PROGRESS_STATUS)
+            );
+            return true;
+        } catch (DataIntegrityViolationException ex) {
+            return false;
         }
+    }
+
+    private String buildRequestFingerprint(ApplicationRequest request) {
+        String payload = request.getClientName() + "|" + request.getAmount();
+        return UUID.nameUUIDFromBytes(payload.getBytes(StandardCharsets.UTF_8)).toString();
     }
 
     private Map<String, Object> parseBody(String responseBody) {

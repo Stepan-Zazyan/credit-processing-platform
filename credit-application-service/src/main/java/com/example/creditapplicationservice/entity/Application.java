@@ -2,6 +2,8 @@ package com.example.creditapplicationservice.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
@@ -27,13 +29,14 @@ public class Application {
     @Column(name = "amount", nullable = false, precision = 18, scale = 2)
     private BigDecimal amount;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 50)
-    private String status;
+    private ApplicationStatus status;
 
     @Column(name = "created_at", insertable = false, updatable = false)
     private OffsetDateTime createdAt;
 
-    public Application(UUID id, String clientName, BigDecimal amount, String status) {
+    public Application(UUID id, String clientName, BigDecimal amount, ApplicationStatus status) {
         this.id = id;
         this.clientName = clientName;
         this.amount = amount;
