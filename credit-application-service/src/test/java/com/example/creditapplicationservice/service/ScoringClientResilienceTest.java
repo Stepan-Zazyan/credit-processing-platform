@@ -70,7 +70,7 @@ class ScoringClientResilienceTest {
                 .setBody("{\"decision\":\"APPROVE\",\"fallback\":false}")
                 .addHeader("Content-Type", "application/json"));
 
-        ScoringDecisionResponse response = scoringClient.getDecision("Ivan").join();
+        ScoringDecisionResponse response = scoringClient.getDecision("Ivan");
 
         assertThat(response.decision()).isEqualTo("APPROVE");
         assertThat(response.fallback()).isFalse();
@@ -81,11 +81,11 @@ class ScoringClientResilienceTest {
     void repeatedFailureOpensCircuit() {
         for (int i = 0; i < 4; i++) {
             mockWebServer.enqueue(new MockResponse().setResponseCode(500));
-            ScoringDecisionResponse response = scoringClient.getDecision("Ivan").join();
+            ScoringDecisionResponse response = scoringClient.getDecision("Ivan");
             assertThat(response.fallback()).isTrue();
         }
 
-        ScoringDecisionResponse openCircuitResponse = scoringClient.getDecision("Ivan").join();
+        ScoringDecisionResponse openCircuitResponse = scoringClient.getDecision("Ivan");
 
         assertThat(openCircuitResponse.fallback()).isTrue();
         assertThat(mockWebServer.getRequestCount()).isEqualTo(4);
@@ -101,7 +101,7 @@ class ScoringClientResilienceTest {
                 .setBody("{\"decision\":\"APPROVE\",\"fallback\":false}")
                 .addHeader("Content-Type", "application/json"));
 
-        ScoringDecisionResponse response = scoringClient.getDecision("Ivan").join();
+        ScoringDecisionResponse response = scoringClient.getDecision("Ivan");
 
         assertThat(response.decision()).isEqualTo("APPROVE");
         assertThat(response.fallback()).isFalse();
@@ -116,7 +116,7 @@ class ScoringClientResilienceTest {
                 .setBody("{\"decision\":\"APPROVE\",\"fallback\":false}")
                 .addHeader("Content-Type", "application/json"));
 
-        ScoringDecisionResponse response = scoringClient.getDecision("Ivan").join();
+        ScoringDecisionResponse response = scoringClient.getDecision("Ivan");
 
         assertThat(response).isEqualTo(ScoringDecisionResponse.fallback());
         assertThat(mockWebServer.getRequestCount()).isGreaterThanOrEqualTo(1);
