@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import java.util.Map;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -19,12 +20,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/applications")
+@RequiredArgsConstructor
 public class ApplicationController {
     private final ApplicationService applicationService;
-
-    public ApplicationController(ApplicationService applicationService) {
-        this.applicationService = applicationService;
-    }
 
     @Operation(summary = "Create credit application")
     @PostMapping
