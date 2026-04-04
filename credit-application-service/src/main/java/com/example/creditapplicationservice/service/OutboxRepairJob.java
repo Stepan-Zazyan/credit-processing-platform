@@ -2,35 +2,27 @@ package com.example.creditapplicationservice.service;
 
 import com.example.creditapplicationservice.config.RepairJobProperties;
 import com.example.creditapplicationservice.entity.Application;
+import com.example.creditapplicationservice.entity.ApplicationStatus;
 import com.example.creditapplicationservice.entity.OutboxEventEntity;
 import com.example.creditapplicationservice.entity.OutboxEventStatus;
 import com.example.creditapplicationservice.repository.ApplicationRepository;
 import com.example.creditapplicationservice.repository.OutboxEventRepository;
 import java.time.OffsetDateTime;
 import java.util.List;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
+@Slf4j
+@RequiredArgsConstructor
 public class OutboxRepairJob {
-    private static final Logger log = LoggerFactory.getLogger(OutboxRepairJob.class);
 
     private final RepairJobProperties repairJobProperties;
     private final OutboxEventRepository outboxEventRepository;
     private final ApplicationRepository applicationRepository;
     private final OutboxPublisher outboxPublisher;
-
-    public OutboxRepairJob(RepairJobProperties repairJobProperties,
-                           OutboxEventRepository outboxEventRepository,
-                           ApplicationRepository applicationRepository,
-                           OutboxPublisher outboxPublisher) {
-        this.repairJobProperties = repairJobProperties;
-        this.outboxEventRepository = outboxEventRepository;
-        this.applicationRepository = applicationRepository;
-        this.outboxPublisher = outboxPublisher;
-    }
 
     @Scheduled(fixedDelayString = "${credit.application.repair.polling-interval-ms:30000}")
     public void reconcile() {
@@ -49,7 +41,7 @@ public class OutboxRepairJob {
 
         if (repairJobProperties.isCheckStuckApplications()) {
             List<Application> potentiallyStuck = applicationRepository.findTop100ByStatusAndCreatedAtBeforeOrderByCreatedAtAsc(
-                    ApplicationService.CREATED_STATUS,
+                    ApplicationStatus.CREATED,
                     thresholdTime
             );
             for (Application application : potentiallyStuck) {
