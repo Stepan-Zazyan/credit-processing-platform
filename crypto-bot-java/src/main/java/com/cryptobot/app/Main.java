@@ -1,10 +1,14 @@
 package com.cryptobot.app;
 
-import com.cryptobot.backtest.strategy.SimpleBreakoutStrategy;
-import com.cryptobot.backtest.strategy.SimpleBreakoutStrategy.StrategyResult;
+import com.cryptobot.backtest.BacktestEngine;
+import com.cryptobot.backtest.BacktestResult;
+import com.cryptobot.backtest.Signal;
+import com.cryptobot.backtest.Strategy;
 import com.cryptobot.marketdata.csv.CsvCandleReader;
 import com.cryptobot.marketdata.model.Candle;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.logging.Level;
@@ -18,17 +22,11 @@ public class Main {
         Path csvPath = resolveCsvPath(args);
         CsvCandleReader reader = new CsvCandleReader();
 
-        int breakoutLookback = 20;
-        int atrPeriod = 14;
-        double atrMultiplier = 2.0;
-        int maxHoldingCandles = 30;
+        BigDecimal feeRate = new BigDecimal("0.001");
+        BigDecimal quantity = BigDecimal.ONE;
 
-        SimpleBreakoutStrategy strategy = new SimpleBreakoutStrategy(
-                breakoutLookback,
-                atrPeriod,
-                atrMultiplier,
-                maxHoldingCandles
-        );
+        BacktestEngine engine = new BacktestEngine(feeRate, quantity);
+        Strategy strategy = createSimpleStubStrategy();
 
         try {
             List<Candle> candles = reader.read(csvPath);
@@ -38,21 +36,39 @@ public class Main {
                 return;
             }
 
-            StrategyResult result = strategy.run(candles);
+            BacktestResult result = engine.run(candles, strategy);
 
             System.out.println("CSV: " + csvPath.toAbsolutePath());
             System.out.println("Candles count: " + candles.size());
-            System.out.println("First candle: " + candles.get(0));
-            System.out.println("Last candle: " + candles.get(candles.size() - 1));
-            System.out.println("Total PnL: " + format(result.totalPnl()));
-            System.out.println("Total trades: " + result.totalTrades());
-            System.out.println("Win rate (%): " + format(result.winRate()));
-            System.out.println("Max drawdown: " + format(result.maxDrawdown()));
-            System.out.println("Profit factor: " + format(result.profitFactor()));
+            System.out.println("Total PnL: " + format(result.getTotalPnl()));
+            System.out.println("Total trades: " + result.getTotalTrades());
+            System.out.println("Win rate (%): " + format(result.getWinRate().multiply(new BigDecimal("100"))));
+            System.out.println("Max drawdown: " + format(result.getMaxDrawdown()));
+            System.out.println("Profit factor: " + format(result.getProfitFactor()));
         } catch (Exception ex) {
             LOGGER.log(Level.SEVERE, "Failed to run backtest for CSV: " + csvPath.toAbsolutePath(), ex);
             System.exit(1);
         }
+    }
+
+    private static Strategy createSimpleStubStrategy() {
+        return (candles, index) -> {
+            if (index == 0) {
+                return Signal.HOLD;
+            }
+
+            BigDecimal previousClose = candles.get(index - 1).getClose();
+            BigDecimal currentClose = candles.get(index).getClose();
+            int comparison = currentClose.compareTo(previousClose);
+
+            if (comparison > 0) {
+                return Signal.BUY;
+            }
+            if (comparison < 0) {
+                return Signal.SELL;
+            }
+            return Signal.HOLD;
+        };
     }
 
     private static Path resolveCsvPath(String[] args) {
@@ -62,10 +78,7 @@ public class Main {
         return Path.of(DEFAULT_CSV_PATH);
     }
 
-    private static String format(double value) {
-        if (Double.isInfinite(value)) {
-            return "INF";
-        }
-        return String.format("%.4f", value);
+    private static String format(BigDecimal value) {
+        return value.setScale(4, RoundingMode.HALF_UP).toPlainString();
     }
 }
