@@ -38,6 +38,13 @@ spring:
       spring.json.add.type.headers: false
       spring.json.trusted.packages: com.example.creditapplicationservice.dto
       spring.json.value.default.type: com.example.creditapplicationservice.dto.ApplicationDecisionEvent
+  cloud:
+    openfeign:
+      client:
+        config:
+          scoringFeignClient:
+            connectTimeout: 500
+            readTimeout: 500
 
 credit:
   application:
@@ -96,7 +103,8 @@ resilience4j:
         maxAttempts: 3
         waitDuration: 200ms
         retryExceptions:
-          - org.springframework.web.client.RestClientException
+          - feign.FeignException
+          - feign.RetryableException
           - java.util.concurrent.TimeoutException
   timelimiter:
     instances:
