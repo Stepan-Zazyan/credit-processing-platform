@@ -1,4 +1,10 @@
 /target/
+/out/
+
 *.log
 *.iml
+
 .idea/
+.vscode/
+
+.DS_Store
