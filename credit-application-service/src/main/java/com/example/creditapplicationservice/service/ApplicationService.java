@@ -72,7 +72,7 @@ public class ApplicationService {
 
         ScoringDecisionResponse scoringDecision = scoringClient.getDecision(request.getClientName());
         log.info("Scoring decision for clientName={} decision={} fallback={}",
-                request.getClientName(), scoringDecision.decision(), scoringDecision.fallback());
+                request.getClientName(), scoringDecision.getDecision(), scoringDecision.fallback());
 
         Application saved = applicationRepository.save(new Application(
                 UUID.randomUUID(),
