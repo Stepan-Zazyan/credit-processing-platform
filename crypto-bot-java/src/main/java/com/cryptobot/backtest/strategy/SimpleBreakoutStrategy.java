@@ -7,15 +7,15 @@ import java.util.List;
 
 public class SimpleBreakoutStrategy {
 
-    private final int breakoutLookback;
+    private final int breakoutPeriod;
     private final int atrPeriod;
     private final double atrMultiplier;
-    private final int maxHoldingCandles;
+    private final int maxHoldingBars;
     private final AtrIndicator atrIndicator;
 
-    public SimpleBreakoutStrategy(int breakoutLookback, int atrPeriod, double atrMultiplier, int maxHoldingCandles) {
-        if (breakoutLookback <= 0) {
-            throw new IllegalArgumentException("breakoutLookback must be positive");
+    public SimpleBreakoutStrategy(int breakoutPeriod, int atrPeriod, double atrMultiplier, int maxHoldingBars) {
+        if (breakoutPeriod <= 0) {
+            throw new IllegalArgumentException("breakoutPeriod must be positive");
         }
         if (atrPeriod <= 0) {
             throw new IllegalArgumentException("atrPeriod must be positive");
@@ -23,14 +23,14 @@ public class SimpleBreakoutStrategy {
         if (atrMultiplier <= 0) {
             throw new IllegalArgumentException("atrMultiplier must be positive");
         }
-        if (maxHoldingCandles <= 0) {
-            throw new IllegalArgumentException("maxHoldingCandles must be positive");
+        if (maxHoldingBars <= 0) {
+            throw new IllegalArgumentException("maxHoldingBars must be positive");
         }
 
-        this.breakoutLookback = breakoutLookback;
+        this.breakoutPeriod = breakoutPeriod;
         this.atrPeriod = atrPeriod;
         this.atrMultiplier = atrMultiplier;
-        this.maxHoldingCandles = maxHoldingCandles;
+        this.maxHoldingBars = maxHoldingBars;
         this.atrIndicator = new AtrIndicator();
     }
 
@@ -56,18 +56,23 @@ public class SimpleBreakoutStrategy {
         double peakEquity = 0.0;
         double maxDrawdown = 0.0;
 
-        int startIndex = Math.max(breakoutLookback, atrPeriod);
+        int startIndex = Math.max(breakoutPeriod, atrPeriod - 1);
 
         for (int i = startIndex; i < candles.size(); i++) {
             Candle candle = candles.get(i);
             double close = candle.getClose().doubleValue();
 
             if (!inPosition) {
-                double breakoutHigh = highestHigh(candles, i - breakoutLookback, i - 1);
+                double currentAtr = atr[i];
+                if (Double.isNaN(currentAtr)) {
+                    continue;
+                }
+
+                double breakoutHigh = highestHigh(candles, i - breakoutPeriod, i - 1);
                 if (close > breakoutHigh) {
                     inPosition = true;
                     entryPrice = close;
-                    stopPrice = entryPrice - atr[i] * atrMultiplier;
+                    stopPrice = entryPrice - (currentAtr * atrMultiplier);
                     barsInTrade = 0;
                 }
                 continue;
@@ -75,44 +80,28 @@ public class SimpleBreakoutStrategy {
 
             barsInTrade++;
 
-            double low = candle.getLow().doubleValue();
-            double closePrice = candle.getClose().doubleValue();
-            double reverseLevel = lowestLow(candles, i - breakoutLookback, i - 1);
+            boolean exitByStop = candle.getLow().doubleValue() <= stopPrice;
+            boolean exitByTime = barsInTrade >= maxHoldingBars;
 
-            boolean exitByStop = low <= stopPrice;
-            boolean exitByReverse = closePrice < reverseLevel;
-            boolean exitByTime = barsInTrade >= maxHoldingCandles;
-
-            if (exitByStop || exitByReverse || exitByTime) {
-                double exitPrice = exitByStop ? stopPrice : closePrice;
+            if (exitByStop || exitByTime) {
+                double exitPrice = exitByStop ? stopPrice : close;
                 double tradePnl = exitPrice - entryPrice;
 
                 totalPnl += tradePnl;
                 totalTrades++;
 
-                if (tradePnl > 0) {
+                if (tradePnl > 0.0) {
                     winningTrades++;
                     grossProfit += tradePnl;
-                } else {
+                } else if (tradePnl < 0.0) {
                     grossLoss += Math.abs(tradePnl);
                 }
 
                 equity += tradePnl;
-                if (equity > peakEquity) {
-                    peakEquity = equity;
-                }
-                double drawdown = peakEquity - equity;
-                if (drawdown > maxDrawdown) {
-                    maxDrawdown = drawdown;
-                }
+                peakEquity = Math.max(peakEquity, equity);
+                maxDrawdown = Math.max(maxDrawdown, peakEquity - equity);
 
                 inPosition = false;
-                continue;
-            }
-
-            double candidateStop = closePrice - atr[i] * atrMultiplier;
-            if (candidateStop > stopPrice) {
-                stopPrice = candidateStop;
             }
         }
 
@@ -123,21 +112,16 @@ public class SimpleBreakoutStrategy {
             totalPnl += tradePnl;
             totalTrades++;
 
-            if (tradePnl > 0) {
+            if (tradePnl > 0.0) {
                 winningTrades++;
                 grossProfit += tradePnl;
-            } else {
+            } else if (tradePnl < 0.0) {
                 grossLoss += Math.abs(tradePnl);
             }
 
             equity += tradePnl;
-            if (equity > peakEquity) {
-                peakEquity = equity;
-            }
-            double drawdown = peakEquity - equity;
-            if (drawdown > maxDrawdown) {
-                maxDrawdown = drawdown;
-            }
+            peakEquity = Math.max(peakEquity, equity);
+            maxDrawdown = Math.max(maxDrawdown, peakEquity - equity);
         }
 
         double winRate = totalTrades == 0 ? 0.0 : (winningTrades * 100.0) / totalTrades;
@@ -157,22 +141,9 @@ public class SimpleBreakoutStrategy {
         double max = Double.NEGATIVE_INFINITY;
         for (int i = fromInclusive; i <= toInclusive; i++) {
             double high = candles.get(i).getHigh().doubleValue();
-            if (high > max) {
-                max = high;
-            }
+            max = Math.max(max, high);
         }
         return max;
-    }
-
-    private double lowestLow(List<Candle> candles, int fromInclusive, int toInclusive) {
-        double min = Double.POSITIVE_INFINITY;
-        for (int i = fromInclusive; i <= toInclusive; i++) {
-            double low = candles.get(i).getLow().doubleValue();
-            if (low < min) {
-                min = low;
-            }
-        }
-        return min;
     }
 
     public record StrategyResult(
