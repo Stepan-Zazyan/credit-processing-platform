@@ -12,14 +12,16 @@ import java.nio.file.Path;
 import java.util.List;
 
 public class Main {
-    public static void main(String[] args) {
-        Path csvPath = Path.of("data", "BTCUSDT", "1m", "2024", "01", "BTC_1m_2024-01.csv");
+    private static final Path DEFAULT_CSV_PATH = Path.of("data", "BTCUSDT", "1m", "2024", "01", "BTC_1m_2024-01.csv");
 
+    public static void main(String[] args) {
+        Path csvPath = resolveCsvPath(args);
         CsvCandleReader reader = new CsvCandleReader();
 
         try {
             List<Candle> candles = reader.read(csvPath);
 
+            System.out.println("Source CSV: " + csvPath.toAbsolutePath());
             System.out.println("Candles count: " + candles.size());
 
             if (candles.isEmpty()) {
@@ -42,7 +44,16 @@ public class Main {
             System.out.println("maxDrawdown=" + result.getMaxDrawdown());
             System.out.println("profitFactor=" + result.getProfitFactor());
         } catch (Exception ex) {
-            System.err.println("Failed to read candles: " + ex.getMessage());
+            System.err.println("Failed to read candles from: " + csvPath.toAbsolutePath());
+            System.err.println("Reason: " + ex.getMessage());
+            System.exit(1);
         }
+    }
+
+    private static Path resolveCsvPath(String[] args) {
+        if (args != null && args.length > 0 && args[0] != null && !args[0].isBlank()) {
+            return Path.of(args[0]);
+        }
+        return DEFAULT_CSV_PATH;
     }
 }
