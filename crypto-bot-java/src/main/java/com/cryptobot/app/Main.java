@@ -4,6 +4,8 @@ import com.cryptobot.backtest.strategy.SimpleBreakoutStrategy;
 import com.cryptobot.marketdata.csv.CsvCandleReader;
 import com.cryptobot.marketdata.model.Candle;
 
+import java.math.RoundingMode;
+import java.text.DecimalFormat;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.logging.Level;
@@ -17,6 +19,8 @@ public class Main {
     private static final int DEFAULT_ATR_PERIOD = 14;
     private static final double DEFAULT_ATR_MULTIPLIER = 2.0;
     private static final int DEFAULT_MAX_HOLDING_BARS = 48;
+    private static final int PNL_SCALE = 4;
+    private static final int PERCENT_SCALE = 2;
 
     public static void main(String[] args) {
         Path csvPath = resolveCsvPath(args);
@@ -40,6 +44,12 @@ public class Main {
                 LOGGER.warning("CSV file was read successfully, but no candle rows were found: " + csvPath.toAbsolutePath());
                 return;
             }
+            int minimumCandlesRequired = strategy.minimumCandlesRequired();
+            if (candles.size() <= minimumCandlesRequired) {
+                LOGGER.warning("Not enough candles for strategy run. Required more than "
+                        + minimumCandlesRequired + ", got: " + candles.size());
+                return;
+            }
 
             SimpleBreakoutStrategy.StrategyResult result = strategy.run(candles);
 
@@ -49,10 +59,10 @@ public class Main {
                     + ", atrPeriod=" + atrPeriod
                     + ", atrMultiplier=" + atrMultiplier
                     + ", maxHoldingBars=" + maxHoldingBars);
-            System.out.printf("total pnl: %.4f%n", result.totalPnl());
+            System.out.printf("total pnl: %s%n", formatDecimal(result.totalPnl(), PNL_SCALE));
             System.out.println("total trades: " + result.totalTrades());
-            System.out.printf("win rate: %.2f%%%n", result.winRate());
-            System.out.printf("max drawdown: %.4f%n", result.maxDrawdown());
+            System.out.printf("win rate: %s%n", formatPercent(result.winRate()));
+            System.out.printf("max drawdown: %s%n", formatDecimal(result.maxDrawdown(), PNL_SCALE));
             System.out.printf("profit factor: %s%n", formatProfitFactor(result.profitFactor()));
         } catch (Exception ex) {
             LOGGER.log(Level.SEVERE, "Failed to run strategy for CSV: " + csvPath.toAbsolutePath(), ex);
@@ -85,6 +95,19 @@ public class Main {
         if (Double.isInfinite(profitFactor)) {
             return "Infinity";
         }
-        return String.format("%.4f", profitFactor);
+        return formatDecimal(profitFactor, PNL_SCALE);
+    }
+
+    private static String formatDecimal(double value, int scale) {
+        DecimalFormat decimalFormat = new DecimalFormat();
+        decimalFormat.setGroupingUsed(false);
+        decimalFormat.setMaximumFractionDigits(scale);
+        decimalFormat.setMinimumFractionDigits(scale);
+        decimalFormat.setRoundingMode(RoundingMode.HALF_UP);
+        return decimalFormat.format(value);
+    }
+
+    private static String formatPercent(double value) {
+        return formatDecimal(value, PERCENT_SCALE) + "%";
     }
 }

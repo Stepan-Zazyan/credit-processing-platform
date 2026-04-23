@@ -6,11 +6,13 @@ import com.cryptobot.marketdata.model.Candle;
 import java.util.List;
 
 public class SimpleBreakoutStrategy {
+    private static final double DEFAULT_FEE_RATE = 0.0;
 
     private final int breakoutPeriod;
     private final int atrPeriod;
     private final double atrMultiplier;
     private final int maxHoldingBars;
+    private final double feeRate;
     private final AtrIndicator atrIndicator;
 
     public SimpleBreakoutStrategy(int breakoutPeriod, int atrPeriod, double atrMultiplier, int maxHoldingBars) {
@@ -31,11 +33,17 @@ public class SimpleBreakoutStrategy {
         this.atrPeriod = atrPeriod;
         this.atrMultiplier = atrMultiplier;
         this.maxHoldingBars = maxHoldingBars;
+        this.feeRate = DEFAULT_FEE_RATE;
         this.atrIndicator = new AtrIndicator();
     }
 
     public StrategyResult run(List<Candle> candles) {
         if (candles == null || candles.isEmpty()) {
+            return new StrategyResult(0.0, 0, 0.0, 0.0, 0.0);
+        }
+
+        int minimumCandlesRequired = minimumCandlesRequired();
+        if (candles.size() <= minimumCandlesRequired) {
             return new StrategyResult(0.0, 0, 0.0, 0.0, 0.0);
         }
 
@@ -85,18 +93,16 @@ public class SimpleBreakoutStrategy {
 
             if (exitByStop || exitByTime) {
                 double exitPrice = exitByStop ? stopPrice : close;
-                double tradePnl = exitPrice - entryPrice;
+                double tradePnl = calculateTradePnl(entryPrice, exitPrice);
 
                 totalPnl += tradePnl;
                 totalTrades++;
-
                 if (tradePnl > 0.0) {
                     winningTrades++;
                     grossProfit += tradePnl;
                 } else if (tradePnl < 0.0) {
                     grossLoss += Math.abs(tradePnl);
                 }
-
                 equity += tradePnl;
                 peakEquity = Math.max(peakEquity, equity);
                 maxDrawdown = Math.max(maxDrawdown, peakEquity - equity);
@@ -107,7 +113,7 @@ public class SimpleBreakoutStrategy {
 
         if (inPosition) {
             double finalClose = candles.get(candles.size() - 1).getClose().doubleValue();
-            double tradePnl = finalClose - entryPrice;
+            double tradePnl = calculateTradePnl(entryPrice, finalClose);
 
             totalPnl += tradePnl;
             totalTrades++;
@@ -137,6 +143,10 @@ public class SimpleBreakoutStrategy {
         return new StrategyResult(totalPnl, totalTrades, winRate, maxDrawdown, profitFactor);
     }
 
+    public int minimumCandlesRequired() {
+        return Math.max(breakoutPeriod, atrPeriod - 1);
+    }
+
     private double highestHigh(List<Candle> candles, int fromInclusive, int toInclusive) {
         double max = Double.NEGATIVE_INFINITY;
         for (int i = fromInclusive; i <= toInclusive; i++) {
@@ -144,6 +154,12 @@ public class SimpleBreakoutStrategy {
             max = Math.max(max, high);
         }
         return max;
+    }
+
+    private double calculateTradePnl(double entryPrice, double exitPrice) {
+        double grossPnl = exitPrice - entryPrice;
+        double fees = (entryPrice + exitPrice) * feeRate;
+        return grossPnl - fees;
     }
 
     public record StrategyResult(
